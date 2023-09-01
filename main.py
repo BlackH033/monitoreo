@@ -5,10 +5,10 @@ import customtkinter
 import os
 from PIL import Image
 from tkinter import filedialog
-
+from windows import *
 import script
 #--------------------------------------------------
-customtkinter.set_appearance_mode("System")    #modo de apariencia del sistema
+customtkinter.set_appearance_mode("Light")    #modo de apariencia del sistema
 customtkinter.set_default_color_theme("blue")  #establece el color de la app en azul 
 #--------------------------------------------------
 
@@ -42,9 +42,9 @@ class App(customtkinter.CTk):
         self.f3.grid(row=2,column=0,pady=(0,20))
         self.value=tkinter.IntVar(value=1)
         self.radio_boton1=customtkinter.CTkRadioButton(self.f3,variable=self.value,value=0,text="Múltiple",font=customtkinter.CTkFont(weight="bold"))
-        self.radio_boton1.grid(row=0,column=0,sticky="nsew")
+        self.radio_boton1.grid(row=0,column=0,padx=(30,0),sticky="nsew")
         self.radio_boton2=customtkinter.CTkRadioButton(self.f3,variable=self.value,value=1,text="Único",font=customtkinter.CTkFont(weight="bold"))
-        self.radio_boton2.grid(row=0,column=1,sticky="nsew")
+        self.radio_boton2.grid(row=0,column=1,padx=(30,0),sticky="nsew")
 
         self.f4=customtkinter.CTkFrame(self.back,fg_color="transparent")
         self.f4.grid(row=3,column=0)
@@ -66,12 +66,8 @@ class App(customtkinter.CTk):
         )
         print(self.value.get())
         if filename!="":
-            script.procesamiento(filename,self.value.get())
-
-
-
-            
-        
+            script.procesamiento(filename,self.value.get())           
+       
 if __name__ == "__main__":
         app = App()
         app.mainloop()

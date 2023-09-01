@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from rasterio import plot
 import os
+from windows import *
 #--------------------------------------------------
 class procesamiento():
     carpeta_raiz=os.path.dirname(__file__)          #guarda la ruta donde se encuentra este archivo .py
@@ -29,9 +30,26 @@ class procesamiento():
             rgb=np.dstack((r,g,b))
             return rgb
 
-        def info(x):
-            salida1=f"Pixeles totales: {x.size} | Dimensión: {x.shape} | Valor minimo: {round(np.nanmin(x),3)} | Valor maximo: {round(np.nanmax(x),3)} | Valor promedio: {round(np.nanmean(x),3)}"
-            plt.figtext(0.23,0.05,salida1, bbox = {'facecolor': 'oldlace', 'alpha': 0.5, 'boxstyle': "square,pad=0.3", 'ec': 'black'})
+        def porcentaje(x,años):
+            if len(x)==1:return "Año inicial"
+            else:
+                porc=(x[-1]-x[-2])/x[-2]*100
+                if porc>0:return f"Incremento del {round(porc,3)}% con\nrespecto al año {años[-2]}"
+                else:return f"Decremento del {round(porc,3)}% con\nrespecto al año {años[-2]}"
+
+        def info(ax,x,m):
+            ax.text(0.5, 0.95, f"Pixeles totales: {x.size}", ha='center', va='center', fontsize=12, color='black')
+            ax.text(0.5, 0.9, f"Dimensión: {x.shape}", ha='center', va='center', fontsize=12, color='black')
+            ax.text(0.5, 0.8, f"Valor NDVI minimo: {round(np.nanmin(x),3)}", ha='center', va='center', fontsize=12, color='black')
+            ax.text(0.5, 0.75, f"Valor NDVI maximo: {round(np.nanmax(x),3)}", ha='center', va='center', fontsize=12, color='black')
+            ax.text(0.5, 0.7, f"Valor NDVI promedio: {round(np.nanmean(x),3)}", ha='center', va='center', fontsize=12, color='black')
+            ax.text(0.5, 0.65, f"_______________________________________", ha='center', va='center', fontsize=12, color='black')
+            ax.text(0.5, 0.5, m, ha='center', va='center', fontsize=12, color='black')
+            #ax.text(0.5, 0.6, f"", ha='right', va='center', fontsize=12, color='black')
+            #ax.text(0.5, 0.6, f"", ha='right', va='center', fontsize=12, color='black')
+            #ax.text(0.5, 0.6, f"", ha='right', va='center', fontsize=12, color='black')
+            salida1=f"Pixeles totales: {x.size} |  |  | | "
+            #plt.figtext(0.05,0.05,salida1, bbox = {'facecolor': 'oldlace', 'alpha': 0.5, 'boxstyle': "square,pad=0.3", 'ec': 'black'})
 
         def clasificacion(x):
             clases=np.array([-1,0,0.1,0.25,0.4,1])
@@ -55,6 +73,8 @@ class procesamiento():
         
         def guardar_ndvi(ruta,tiffs,data,crs,width,height,transform):
             print(tiffs)
+            os.mkdir(os.path.join(ruta,"geotiff"))
+            ruta=os.path.join(ruta,"geotiff")
             for i in range(len(data)):
                 ndviImage = rs.open(os.path.join(ruta,f"NDVI_{tiffs[i]}"), 'w', driver='Gtiff',
                         width=width, height=height,
@@ -66,19 +86,40 @@ class procesamiento():
                 ndviImage.write(data[i],1) #ndvi
                 ndviImage.close()
         
-        def mostrar_ndvi_individual(ruta,names,ndvi):
+        def mostrar_ndvi_individual(ruta,names,ndvi,tipo):
             nombre=ruta.split("/")
-            
+            nombre=nombre[-1].split("\\")
+            prom=[]
+            años=[]
             #plt.ion()
+            os.mkdir(os.path.join(ruta,"graficos"))
             for i in range(len(names)):  
-                fig, ax = plt.subplots()
+                prom.append(round(np.nanmean(ndvi[i]),3))
+                años.append(names[i][:-4])
+                fig = plt.figure(figsize=(14,6))
+                gs = fig.add_gridspec(1, 2, width_ratios=[2, 1]) 
+                ax = fig.add_subplot(gs[0]) 
+                ax2 = fig.add_subplot(gs[1]) 
                 im = ax.imshow(ndvi[i], cmap='RdYlGn',vmax=1)
-                fig.colorbar(im, ax=ax,label='NDVI')
-                plt.suptitle(f'Índice de Vegetación de Diferencia Normalizada (NDVI) para {names[i][:-4]} en {nombre[-2]}',weight='bold',size=16)
-                plt.axis('off')
-                info(ndvi[i])
-                plt.savefig(os.path.join(ruta,f"visual_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
-                plt.show()
+                plt.colorbar(im, ax=ax,label='NDVI')
+                fig.suptitle(f'Índice de Vegetación de Diferencia Normalizada (NDVI) para {names[i][:-4]} en {nombre[0]}',weight='bold',size=16)
+                ax.axis('off')
+                info(ax2,ndvi[i],porcentaje(prom,años))
+                ax2.set_xlim(0, 1)
+                ax2.set_ylim(0, 1)
+                ax2.set_xticks([])
+                ax2.set_yticks([])
+
+                inner_left = 0.6658
+                inner_bottom = 0.1
+                inner_width = 0.234#5
+                inner_height = 0.3
+                inner_ax = fig.add_axes([inner_left, inner_bottom, inner_width, inner_height])
+                inner_ax.hist(ndvi[i].flatten(),label="NDVI",color="green",bins=200,range=(-1,1))   
+                if tipo==1:
+                    plt.get_current_fig_manager().window.state('zoomed')
+                    plt.show()
+                fig.savefig(os.path.join(os.path.join(ruta,f"graficos"),f"visual_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
                 plt.close(fig)
             #plt.ion()
             
@@ -88,32 +129,20 @@ class procesamiento():
                 fig.colorbar(im, ax=ax,label='NDVI')
                 plt.axis('off')
                 plt.ioff()
-                plt.savefig(os.path.join(ruta,f"grafico_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
+                plt.savefig(os.path.join(os.path.join(ruta,f"graficos"),f"grafico_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
                 plt.close(fig)
+                
+                fig, ax = plt.subplots()
+                ax.hist(ndvi[i].flatten(),label="NDVI",color="green",bins=200,range=(-1,1))
+                plt.xlabel('NDVI')
+                plt.ylabel('Frecuencia')
+                plt.grid(True)
+                plt.ioff()
+                plt.savefig(os.path.join(os.path.join(ruta,f"graficos"),f"histograma_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
+                plt.close(fig)
+            
             print("Graficos guardados :D")
-                
-            """
-                plt.figure(figsize=(10,8))
-                plt.imshow(ndvi[i], cmap='RdYlGn',vmax=1)
-                plt.colorbar(label='NDVI')
-                plt.suptitle(f'Índice de Vegetación de Diferencia Normalizada (NDVI) para {names[i][:-4]} en {nombre[-2]}',weight='bold',size=16)
-                plt.axis('off')
-                info(ndvi[i])
-                plt.subplots_adjust(right=0.83)
-                plt.get_current_fig_manager().window.maxsize()  
-                plt.savefig(os.path.join(ruta,f"grafico_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
-                plt.show()"""
-                
-
-
-
-        
-        
-        
-        
-        
-
-
+               
 
         #--------------------------------------------------
         
@@ -125,9 +154,29 @@ class procesamiento():
             ndvis=[ndvi(i[2],i[3]) for i in arrays]
             ruta_resultado=crear_carpeta(self.ruta)
             guardar_ndvi(ruta_resultado,tifs,ndvis,imgs[0].crs,imgs[0].width,imgs[0].height,imgs[0].transform)
-            mostrar_ndvi_individual(ruta_resultado,tifs,ndvis)
-
+            mostrar_ndvi_individual(ruta_resultado,tifs,ndvis,1)
+            ventana=ventana_secundaria()
+            ventana.generado_correctamente_unico(ruta)
         else:
+            carpetas=self.directorio
+            if "resultado" in self.directorio:
+                carpetas=self.directorio[:self.directorio.index("resultado")]
+                print(self.directorio)
+            ruta_resultado=crear_carpeta(self.ruta)
+            pro=1/len(self.directorio)
+            for i in carpetas:
+                print(f"\nTrabajando en {i}")
+                ruta_c=os.path.join(ruta,i)
+                tifs=listar_tif(os.listdir(ruta_c))
+                imgs=[rs.open(os.path.join(ruta_c,i)) for i in tifs]
+                arrays=[i.read().astype('float64') for i in imgs]
+                ndvis=[ndvi(i[2],i[3]) for i in arrays]
+                os.mkdir(os.path.join(ruta_resultado,i))
+                guardar_ndvi(os.path.join(ruta_resultado,i),tifs,ndvis,imgs[0].crs,imgs[0].width,imgs[0].height,imgs[0].transform)
+                mostrar_ndvi_individual(os.path.join(ruta_resultado,i),tifs,ndvis,0) 
+                print("_______________________________________________") 
+            ventana=ventana_secundaria()
+            ventana.generado_correctamente_unico(ruta)
             print(self.directorio)
 
         """
