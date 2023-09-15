@@ -17,7 +17,7 @@ class ventana_secundaria(customtkinter.CTkToplevel):
         self.grid_columnconfigure(1, weight=1)
         
 
-    def generado_correctamente_unico(self,ruta):
+    def generado_correctamente_unico(self,ruta,tiempo):
         self.title("Correcto")
         self.iconbitmap(os.path.join(ventana_secundaria.carpeta_img,"icono.ico"))
         self.iconocorrect=customtkinter.CTkImage(Image.open(os.path.join(ventana_secundaria.carpeta_img,"comprobado.png")),size=(90,90))
@@ -29,11 +29,14 @@ class ventana_secundaria(customtkinter.CTkToplevel):
         self.textbox.insert("0.0",ruta)
         self.textbox.grid(row=2, column=0, sticky="nsew",padx=20)
 
+        self.textcorrecto=customtkinter.CTkLabel(self,text=tiempo,font=customtkinter.CTkFont(size=14))
+        self.textcorrecto.grid(row=3,column=0,padx=40,pady=(0,10),sticky="nsew")
+
         self.btn_cerrar = customtkinter.CTkButton(self, text ="Abrir carpeta", command = lambda:self.abrir_carpeta(ruta),fg_color="green",font=customtkinter.CTkFont(size=18,weight="bold"),hover_color="#0DAF0A",width=70)
-        self.btn_cerrar.grid(row=3,column=0,sticky="nsew",pady=(40, 30),padx=230)
+        self.btn_cerrar.grid(row=4,column=0,sticky="nsew",pady=(20, 20),padx=230)
 
         self.f4=customtkinter.CTkFrame(self,corner_radius=0)
-        self.f4.grid(row=4,column=0,padx=0,pady=(60,0))
+        self.f4.grid(row=5,column=0,padx=0,pady=(60,0))
         self.img2=customtkinter.CTkImage(Image.open(os.path.join(ventana_secundaria.carpeta_img,"logo_isa.png")),size=(118,63))
         self.img2_insert=customtkinter.CTkLabel(self.f4,image=self.img2,text="")
         self.img2_insert.grid(row=0,column=0,padx=(10,10))

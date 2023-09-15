@@ -1,11 +1,16 @@
-
-from array import array
 import rasterio as rs
 import matplotlib.pyplot as plt
 import numpy as np
-from rasterio import plot
 import os
 from windows import *
+from shapely.geometry import shape
+import geopandas as gpd
+from datetime import datetime
+from rasterio.features import geometry_mask
+import openpyxl
+from rasterio.warp import calculate_default_transform, reproject
+from pyproj import Transformer
+import numpy as np
 #--------------------------------------------------
 class procesamiento():
     carpeta_raiz=os.path.dirname(__file__)          #guarda la ruta donde se encuentra este archivo .py
@@ -31,11 +36,11 @@ class procesamiento():
             return rgb
 
         def porcentaje(x,años):
-            if len(x)==1:return "Año inicial"
+            if len(x)==1:return "Dato inicial"
             else:
                 porc=(x[-1]-x[-2])/x[-2]*100
-                if porc>0:return f"Incremento del {round(porc,3)}% con\nrespecto al año {años[-2]}"
-                else:return f"Decremento del {round(porc,3)}% con\nrespecto al año {años[-2]}"
+                if porc>0:return f"Incremento del {round(porc,3)}% con\nrespecto a{años[-2]}"
+                else:return f"Decremento del {round(abs(porc),3)}% con\nrespecto a {años[-2]}"
 
         def info(ax,x,m):
             ax.text(0.5, 0.95, f"Pixeles totales: {x.size}", ha='center', va='center', fontsize=12, color='black')
@@ -48,16 +53,56 @@ class procesamiento():
             #ax.text(0.5, 0.6, f"", ha='right', va='center', fontsize=12, color='black')
             #ax.text(0.5, 0.6, f"", ha='right', va='center', fontsize=12, color='black')
             #ax.text(0.5, 0.6, f"", ha='right', va='center', fontsize=12, color='black')
-            salida1=f"Pixeles totales: {x.size} |  |  | | "
-            #plt.figtext(0.05,0.05,salida1, bbox = {'facecolor': 'oldlace', 'alpha': 0.5, 'boxstyle': "square,pad=0.3", 'ec': 'black'})
+ 
+        def clas(x):
+            if 0.6<x<=1:return 0
+            elif 0.4<x<=0.6:return 1
+            elif 0.2<x<=0.4:return 2
+            elif -1<=x<=0.2:return 3
 
-        def clasificacion(x):
-            clases=np.array([-1,0,0.1,0.25,0.4,1])
-            ndvi_clasificado=np.digitize(x,clases)
-            return ndvi_clasificado
+        def cambio2(x,y):
+            global factor
+            factor=np.array([[None,-1 ,-4  ,-6],
+                            [1   ,None,-2  ,-5],
+                            [4   ,2   ,None,-3],
+                            [6   ,5   ,3   ,None]])
+            return factor[x][y]
 
         def listar_tif(x):
             return [i for i in x if i[-4:]==".tif"]
+        
+        def retransformar(x,rut):
+            imgs=[]
+            os.makedirs(os.path.join(rut,"img_origen_nacional"))
+            for i in x:
+                print(i)
+                src=rs.open(os.path.join(ruta,i))
+                transform, width, height = calculate_default_transform(src.crs, "EPSG:9377", src.width, src.height, *src.bounds)
+                kwargs = src.meta.copy()
+                kwargs.update({
+                    'crs': "EPSG:9377",
+                    'transform': transform,
+                    'width': width,
+                    'height': height
+                })
+
+            # Crear el nuevo archivo raster de salida
+                dst=rs.open(rut+"/img_origen_nacional"+f"/{i}", 'w', **kwargs)
+                for a in range(1, src.count + 1):
+                    reproject(
+                        source=rs.band(src, a),
+                        destination=rs.band(dst, a),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs="EPSG:9377",
+                        resampling=rs.enums.Resampling.nearest  # Cambia el método de interpolación según sea necesario
+                    )
+                dst.close()
+                src.close()
+                fn=rs.open(rut+"/img_origen_nacional"+f"/{i}")
+                imgs.append(fn)
+            return imgs
 
         def crear_carpeta(ruta):
             conteo=1
@@ -122,7 +167,8 @@ class procesamiento():
                 fig.savefig(os.path.join(os.path.join(ruta,f"graficos"),f"visual_NDVI_{names[i][:-4]}.png"), dpi=300,bbox_inches='tight')
                 plt.close(fig)
             #plt.ion()
-            
+            global inicio
+            inicio=datetime.now()
             for i in range(len(names)):
                 fig, ax = plt.subplots()
                 im = ax.imshow(ndvi[i], cmap='RdYlGn',vmax=1)
@@ -143,20 +189,95 @@ class procesamiento():
             
             print("Graficos guardados :D")
                
+        def alertas(x,ruta,crs,transform):
+            rt_detec=os.path.join(ruta,"deteccion")
+            os.mkdir(rt_detec)
+            matriz = np.empty((len(x[-1]),len(x[-1][0])))
+            matriz[:] = np.nan
+            c=0
+            tip={0:"densa",1:"moderada",2:"escasa",3:"limpio"}
+            ar=open(os.path.join(rt_detec,"registro.txt"),"w")
+            for i in range(len(x[-1])):
+                for e in range(len(x[-1][i])):
+                    if not(np.isnan(x[-1][i][e])) and not(np.isnan(x[-2][i][e])):
+                    #print(tip[clas(x[-1][i][e])],tip[clas(x[-2][i][e])])
+                        if tip[clas(x[-1][i][e])]!=tip[clas(x[-2][i][e])]:
+                            ar.write(f"{tip[clas(x[-1][i][e])]} - {tip[clas(x[-2][i][e])]} | {x[-1][i][e]} - {x[-2][i][e]}\n")
+                            matriz[i][e]=cambio2(clas(x[-2][i][e]),clas(x[-1][i][e]))
+                        c+=1
+            ar.close()
+            matriz=matriz.astype("float32")
+            geometry = [shape(geom) for geom, value in rs.features.shapes(matriz, transform=transform) if not(np.isnan(value))]
+            gdf = gpd.GeoDataFrame({'geometry': geometry},crs=crs)
+            gdf['valor'] = [value for geom, value in rs.features.shapes(matriz, transform=transform) if not(np.isnan(value))]
+            gdf['area'] = gdf['geometry'].area
+            gdf['cambio']= [f"{tip[np.where(factor==int(value))[0][0]]} >> {tip[np.where(factor==int(value))[1][0]]}" for geom, value in rs.features.shapes(matriz, transform=transform) if not(np.isnan(value))]
+            gdf['dscrpcn']=[f"Posible INCREMENTO de vegetacion" if int(value) in (4,7,8,10,11,12) else f"Posible DISMINUCION de vegetacion" for geom, value in rs.features.shapes(matriz, transform=transform) if not(np.isnan(value))]
+            gdf = gdf[gdf['geometry'].area >= 37]
+            gdf["x_cntro"]=gdf["geometry"].centroid.x
+            gdf["y_cntro"]=gdf["geometry"].centroid.y
+            lista=list(zip(gdf["x_cntro"],gdf["y_cntro"]))
+            transformer = Transformer.from_crs('EPSG:9377','EPSG:4326',always_xy=True)
+            lista = np.array(list(transformer.itransform(lista)))
+            gdf['x']=lista[:,0]
+            gdf['y']=lista[:,1]
+            gdf.to_excel(os.path.join(rt_detec,"registro_deteccion.xlsx"),index=False, engine="openpyxl")
+            
+            gdf_menos=gdf[gdf['valor'].isin([1,2,3,5,6,9])]
+            gdf_mas=gdf[gdf['valor'].isin([4,7,8,10,11,12])]
 
+
+            carpeta_shp=os.path.join(rt_detec,"shp")
+            os.mkdir(carpeta_shp)
+            carpeta_kml=os.path.join(rt_detec,"kml")
+            os.mkdir(carpeta_kml)
+
+            gdf.to_file(os.path.join(carpeta_shp,"clasificacion.shp"))
+            gpd.GeoDataFrame(geometry=gdf["geometry"].centroid,crs=crs).to_file(os.path.join(carpeta_shp,"puntos_clasificacion.shp"))
+            
+            gdf_menos.to_file(os.path.join(carpeta_shp,"posible_perdida.shp"))
+            gpd.GeoDataFrame(geometry=gdf_menos["geometry"].centroid,crs=crs).to_file(os.path.join(carpeta_shp,"puntos_perdida.shp"))
+            
+            gdf_mas.to_file(os.path.join(carpeta_shp,"posible_incremento.shp"))
+            gpd.GeoDataFrame(geometry=gdf_mas["geometry"].centroid,crs=crs).to_file(os.path.join(carpeta_shp,"puntos_incremento.shp"))
+            print(f'Archivo shapefile creado en: {carpeta_shp}')
+            
+            shp=gpd.read_file(os.path.join(carpeta_shp,"clasificacion.shp"))                                                       
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML']='rw'  
+            shp.to_file(os.path.join(carpeta_kml,"clasificacion.kml"),driver="KML") 
+            shpp=gpd.read_file(os.path.join(carpeta_shp,"puntos_clasificacion.shp"))                                                       
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML']='rw'  
+            shpp.to_file(os.path.join(carpeta_kml,"puntos_clasificacion.kml"),driver="KML") 
+            
+            shp2=gpd.read_file(os.path.join(carpeta_shp,"posible_perdida.shp"))                                                       
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML']='rw'  
+            shp2.to_file(os.path.join(carpeta_kml,"posible_perdida.kml"),driver="KML")
+            shpp2=gpd.read_file(os.path.join(carpeta_shp,"puntos_perdida.shp"))                                                       
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML']='rw'  
+            shpp2.to_file(os.path.join(carpeta_kml,"puntos_perdida.kml"),driver="KML") 
+
+            shp3=gpd.read_file(os.path.join(carpeta_shp,"posible_incremento.shp"))                                                       
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML']='rw'  
+            shp3.to_file(os.path.join(carpeta_kml,"posible_incremento.kml"),driver="KML")
+            shpp3=gpd.read_file(os.path.join(carpeta_shp,"puntos_incremento.shp"))                                                       
+            gpd.io.file.fiona.drvsupport.supported_drivers['KML']='rw'  
+            shpp3.to_file(os.path.join(carpeta_kml,"puntos_incremento.kml"),driver="KML") 
+
+        def mostrar_img(x):
+            pass
         #--------------------------------------------------
         
         
         if tipo==1:
             tifs=listar_tif(self.directorio)
-            imgs=[rs.open(os.path.join(ruta,i)) for i in tifs]
+            ruta_resultado=crear_carpeta(self.ruta)
+            imgs=retransformar(tifs,ruta_resultado) #[rs.open(os.path.join(ruta,i)) for i in tifs]
             arrays=[i.read().astype('float64') for i in imgs]
             ndvis=[ndvi(i[2],i[3]) for i in arrays]
-            ruta_resultado=crear_carpeta(self.ruta)
             guardar_ndvi(ruta_resultado,tifs,ndvis,imgs[0].crs,imgs[0].width,imgs[0].height,imgs[0].transform)
             mostrar_ndvi_individual(ruta_resultado,tifs,ndvis,1)
-            ventana=ventana_secundaria()
-            ventana.generado_correctamente_unico(ruta)
+            alertas(ndvis,ruta_resultado,imgs[0].crs,imgs[0].transform)
+
         else:
             carpetas=self.directorio
             if "resultado" in self.directorio:
@@ -175,10 +296,10 @@ class procesamiento():
                 guardar_ndvi(os.path.join(ruta_resultado,i),tifs,ndvis,imgs[0].crs,imgs[0].width,imgs[0].height,imgs[0].transform)
                 mostrar_ndvi_individual(os.path.join(ruta_resultado,i),tifs,ndvis,0) 
                 print("_______________________________________________") 
-            ventana=ventana_secundaria()
-            ventana.generado_correctamente_unico(ruta)
-            print(self.directorio)
-
+        ventana=ventana_secundaria()
+        ventana.generado_correctamente_unico(ruta,f"tiempo total de ejecución: {(datetime.now()-inicio).total_seconds()} segundos")
+        print(f"tiempo total: {(datetime.now()-inicio).total_seconds()} segundos | {(datetime.now()-inicio).total_seconds()*1000} milisegundos")
+        
         """
         #--------------------------------------------------
         #lectura de imagenes

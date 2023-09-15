@@ -1,12 +1,11 @@
 #--------------------lib----------------------------
-from email.mime import image
 import tkinter
 import customtkinter
 import os
 from PIL import Image
 from tkinter import filedialog
 from windows import *
-import script
+from script import *
 #--------------------------------------------------
 customtkinter.set_appearance_mode("Light")    #modo de apariencia del sistema
 customtkinter.set_default_color_theme("blue")  #establece el color de la app en azul 
@@ -18,7 +17,7 @@ class App(customtkinter.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("Monitoreo mediante NDVI")
+        self.title("C.Bio")
         self.geometry(f"{310}x{450}")  
         self.resizable(width=False, height=False)
         self.iconbitmap(os.path.join(App.carpeta_img,"icono.ico"))    
@@ -29,8 +28,8 @@ class App(customtkinter.CTk):
 
         self.f1=customtkinter.CTkFrame(self.back,fg_color="transparent")
         self.f1.grid(row=0,column=0,sticky="nswe",pady=20)
-        self.texto1=customtkinter.CTkLabel(self.f1,text="Monitoreo",font=customtkinter.CTkFont(size=20,weight="bold"))
-        self.texto1.grid(row=0,column=0,sticky="nswe",padx=100)
+        self.texto1=customtkinter.CTkLabel(self.f1,text="Procesamiento",font=customtkinter.CTkFont(size=20,weight="bold"))
+        self.texto1.grid(row=0,column=0,sticky="nswe",padx=80)
 
         self.f2=customtkinter.CTkFrame(self.back,fg_color="transparent")
         self.f2.grid(row=1,column=0,sticky="nswe",pady=10)
@@ -66,7 +65,7 @@ class App(customtkinter.CTk):
         )
         print(self.value.get())
         if filename!="":
-            script.procesamiento(filename,self.value.get())           
+            procesamiento(filename,self.value.get())           
        
 if __name__ == "__main__":
         app = App()
